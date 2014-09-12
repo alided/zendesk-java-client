@@ -52,6 +52,7 @@ public class Zendesk implements Closeable {
     private final String url;
     private final ObjectMapper mapper;
     private final Logger logger;
+    private final String oauthToken;
     private boolean closed = false;
     private static final Map<String, Class<? extends SearchResultEntity>> searchResultTypes = searchResultTypes();
 
@@ -84,6 +85,21 @@ public class Zendesk implements Closeable {
             }
             this.realm = null;
         }
+        this.oauthToken = null;
+        this.mapper = createMapper();
+    }
+
+    private Zendesk(AsyncHttpClient client, String url, String oauthToken) {
+        this.logger = LoggerFactory.getLogger(Zendesk.class);
+        this.closeClient = client == null;
+        this.client = client == null ? new AsyncHttpClient() : client;
+        this.url = url.endsWith("/") ? url + "api/v2" : url + "/api/v2";
+        this.realm = null;
+        if(oauthToken == null) {
+            throw new IllegalStateException("Cannot specify token or password without specifying username");
+        }
+        this.oauthToken = oauthToken;
+
         this.mapper = createMapper();
     }
 
@@ -440,8 +456,8 @@ public class Zendesk implements Closeable {
 
     public List<Identity> setUserPrimaryIdentity(long userId, long identityId) {
         return complete(submit(req("PUT",
-                tmpl("/users/{userId}/identities/{identityId}/make_primary.json").set("userId", userId)
-                        .set("identityId", identityId), JSON, null),
+                        tmpl("/users/{userId}/identities/{identityId}/make_primary.json").set("userId", userId)
+                                .set("identityId", identityId), JSON, null),
                 handleList(Identity.class, "identities")));
     }
 
@@ -489,14 +505,14 @@ public class Zendesk implements Closeable {
 
     public void deleteUserIdentity(long userId, long identityId) {
         complete(submit(req("DELETE", tmpl("/users/{userId}/identities/{identityId}.json")
-                .set("userId", userId)
-                .set("identityId", identityId)
+                        .set("userId", userId)
+                        .set("identityId", identityId)
         ), handleStatus()));
     }
 
     public void createUserIdentity(long userId, Identity identity) {
         complete(submit(req("POST", tmpl("/users/{userId}/identities.json").set("userId", userId), JSON, json(
-             Collections.singletonMap("identity", identity))), handle(Identity.class, "identity")));
+                Collections.singletonMap("identity", identity))), handle(Identity.class, "identity")));
     }
 
     public void createUserIdentity(User user, Identity identity) {
@@ -579,8 +595,8 @@ public class Zendesk implements Closeable {
 
     public Comment getRequestComment(long requestId, long commentId) {
         return complete(submit(req("GET", tmpl("/requests/{requestId}/comments/{commentId}.json")
-                .set("requestId", requestId)
-                .set("commentId", commentId)),
+                        .set("requestId", requestId)
+                        .set("commentId", commentId)),
                 handle(Comment.class, "comment")));
     }
 
@@ -739,6 +755,9 @@ public class Zendesk implements Closeable {
         if (realm != null) {
             builder.setRealm(realm);
         }
+        else if(oauthToken != null) {
+            builder.addHeader("Authorization", "Bearer " + oauthToken);
+        }
         builder.setUrl(template.toString());
         return builder.build();
     }
@@ -747,6 +766,9 @@ public class Zendesk implements Closeable {
         RequestBuilder builder = new RequestBuilder(method);
         if (realm != null) {
             builder.setRealm(realm);
+        }
+        else if(oauthToken != null) {
+            builder.addHeader("Authorization", "Bearer " + oauthToken);
         }
         builder.setUrl(template.toString());
         builder.addHeader("Content-type", contentType);
@@ -758,6 +780,9 @@ public class Zendesk implements Closeable {
         RequestBuilder builder = new RequestBuilder(method);
         if (realm != null) {
             builder.setRealm(realm);
+        }
+        else if(oauthToken != null) {
+            builder.addHeader("Authorization", "Bearer " + oauthToken);
         }
         builder.addQueryParameter("page", Integer.toString(page));
         builder.setUrl(template.toString().replace("%2B", "+")); //replace out %2B with + due to API restriction
@@ -1062,6 +1087,7 @@ public class Zendesk implements Closeable {
         private String username = null;
         private String password = null;
         private String token = null;
+        private String oauthToken = null;
 
         public Builder(String url) {
             this.url = url;
@@ -1098,10 +1124,18 @@ public class Zendesk implements Closeable {
         }
 
         public Zendesk build() {
-            if (token == null) {
+            if(oauthToken != null) {
+                return new Zendesk(client, url, oauthToken);
+            } else if (token == null) {
                 return new Zendesk(client, url, username, password);
+            } else {
+                return new Zendesk(client, url, username + "/token", token);
             }
-            return new Zendesk(client, url, username + "/token", token);
+        }
+
+        public Builder setOauthToken(String oauthToken) {
+            this.oauthToken = oauthToken;
+            return this;
         }
     }
 }
