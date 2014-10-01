@@ -583,6 +583,11 @@ public class Zendesk implements Closeable {
                 handleList(Comment.class, "comments"));
     }
 
+    public Comment addTicketComment(long id, Comment comment) {
+        return complete(submit(req("POST", tmpl("/tickets/{id}/comments.json").set("id", id), JSON, json(
+                Collections.singletonMap("comment", comment))), handle(Comment.class, "comment")));
+    }
+
     public Comment getRequestComment(org.zendesk.client.v2.model.Request request, Comment comment) {
         checkHasId(comment);
         return getRequestComment(request, comment.getId());
@@ -744,7 +749,7 @@ public class Zendesk implements Closeable {
             } else {
                 logger.debug("Request {} {}", request.getMethod(), request.getUrl());
             }
-            return client.executeRequest(request, handler);
+           return client.executeRequest(request, handler);
         } catch (IOException e) {
             throw new ZendeskException(e.getMessage(), e);
         }
