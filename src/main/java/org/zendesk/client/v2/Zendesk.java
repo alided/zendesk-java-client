@@ -712,6 +712,9 @@ public class Zendesk implements Closeable {
     }
 
     public <T extends SearchResultEntity> Iterable<T> getSearchResults(Class<T> type, String query) {
+        return getSearchResults(type, query, "");
+    }
+    public <T extends SearchResultEntity> Iterable<T> getSearchResults(Class<T> type, String query, String params) {
         String typeName = null;
         for (Map.Entry<String,Class<? extends SearchResultEntity>> entry: searchResultTypes.entrySet()) {
             if (type.equals(entry.getValue())) {
@@ -720,7 +723,7 @@ public class Zendesk implements Closeable {
             }
         }
         if (typeName == null) return Collections.emptyList();
-        return new PagedIterable<T>(tmpl("/search.json{?query}").set("query", query + "+type:" + typeName),
+        return new PagedIterable<T>(tmpl("/search.json{?query}&{params}").set("query", query + "+type:" + typeName).set("params", params),
                 handleList(type, "results"));
     }
 
